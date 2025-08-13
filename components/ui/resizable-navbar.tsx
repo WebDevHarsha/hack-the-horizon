@@ -8,7 +8,6 @@ import {
   useScroll,
   useMotionValueEvent,
 } from "motion/react";
-import Image from "next/image";
 
 import React, { useRef, useState } from "react";
 
