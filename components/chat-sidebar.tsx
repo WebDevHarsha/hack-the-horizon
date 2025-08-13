@@ -95,7 +95,7 @@ export function ChatSidebar({
           </div>
 
           {/* Settings */}
-          <div className="p-4 border-t border-sidebar-border">
+          <div className="p-[22px] border-t border-sidebar-border">
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent"
