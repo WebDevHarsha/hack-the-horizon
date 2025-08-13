@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ChatSidebar } from "@/components/chat-sidebar"
 import { ChatMessage } from "@/components/chat-message"
 import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input"
@@ -9,6 +9,23 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Menu } from "lucide-react"
 import ModelsNav from "@/components/modelsnav"
+import { Timestamp } from 'firebase/firestore'
+
+// Firestore imports
+import {
+  createNewChat,
+  getChatHistory,
+  getChatMessages,
+  saveMessage,
+  saveLearningContext,
+  getLearningContext,
+  generateChatTitle,
+  updateChatTitle,
+  deleteChat,
+  subscribeToMessages,
+  type FirestoreChatHistory,
+  type FirestoreMessage
+} from "@/lib/firestore"
 
 // New Gemini import
 import {
@@ -41,15 +58,15 @@ interface LearningContext {
 export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
-  const [activeChatId, setActiveChatId] = useState<string>("1")
+  const [activeChatId, setActiveChatId] = useState<string | undefined>(undefined)
   const [inputValue, setInputValue] = useState("")
   const [learningContext, setLearningContext] = useState<LearningContext | null>(null)
-  const [chatHistory] = useState<ChatHistory[]>([
-    { id: "1", title: "Exploring JavaScript fundamentals", timestamp: new Date(2024, 0, 15) },
-    { id: "2", title: "Understanding React concepts", timestamp: new Date(2024, 0, 14) },
-    { id: "3", title: "Database design principles", timestamp: new Date(2024, 0, 13) },
-    { id: "4", title: "Problem-solving strategies", timestamp: new Date(2024, 0, 12) },
-  ])
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [messageLoading, setMessageLoading] = useState(false)
+
+  // For demo purposes - in production, get this from auth
+  const userId = "demo-user" // Replace with actual user ID from authentication
 
   const placeholders = [
     "I want to learn about...",
@@ -63,6 +80,95 @@ export default function Home() {
   const ai = new GoogleGenAI({
     apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
   })
+
+  // Convert Firestore timestamp to Date
+  const timestampToDate = (timestamp: Timestamp): Date => {
+    return timestamp.toDate()
+  }
+
+  // Convert Message to FirestoreMessage format
+  const messageToFirestore = (message: Message): Omit<FirestoreMessage, 'timestamp'> => ({
+    id: message.id,
+    content: message.content,
+    isUser: message.isUser,
+    messageType: message.messageType
+  })
+
+  // Convert FirestoreMessage to Message format
+  const firestoreToMessage = (firestoreMessage: FirestoreMessage): Message => ({
+    id: firestoreMessage.id,
+    content: firestoreMessage.content,
+    isUser: firestoreMessage.isUser,
+    timestamp: timestampToDate(firestoreMessage.timestamp),
+    messageType: firestoreMessage.messageType
+  })
+
+  // Load chat history on component mount
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const history = await getChatHistory(userId)
+        const convertedHistory = history.map(chat => ({
+          id: chat.id,
+          title: chat.title,
+          timestamp: timestampToDate(chat.timestamp)
+        }))
+        setChatHistory(convertedHistory)
+        
+        // Auto-select the most recent chat or create a new one
+        if (convertedHistory.length > 0) {
+          setActiveChatId(convertedHistory[0].id)
+        } else {
+          // Create first chat for new user
+          const newChatId = await createNewChat(userId)
+          setActiveChatId(newChatId)
+        }
+      } catch (error) {
+        console.error('Error loading chat history:', error)
+        // Create a fallback new chat
+        const newChatId = await createNewChat(userId)
+        setActiveChatId(newChatId)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadChatHistory()
+  }, [userId])
+
+  // Load messages when active chat changes
+  useEffect(() => {
+    if (!activeChatId) return
+
+    const loadMessages = async () => {
+      setMessageLoading(true)
+      try {
+        const firestoreMessages = await getChatMessages(activeChatId)
+        const convertedMessages = firestoreMessages.map(firestoreToMessage)
+        setMessages(convertedMessages)
+
+        // Load learning context
+        const context = await getLearningContext(activeChatId)
+        if (context) {
+          setLearningContext({
+            topic: context.topic,
+            userLevel: context.userLevel,
+            previousQuestions: context.previousQuestions,
+            userInsights: context.userInsights,
+            currentFocus: context.currentFocus
+          })
+        } else {
+          setLearningContext(null)
+        }
+      } catch (error) {
+        console.error('Error loading messages:', error)
+      } finally {
+        setMessageLoading(false)
+      }
+    }
+
+    loadMessages()
+  }, [activeChatId])
 
   const generateSocraticPrompt = (userMessage: string, context: LearningContext | null) => {
     const basePrompt = `You are a Socratic teacher. Your role is to guide learning through thoughtful questions, not to give direct answers. 
@@ -113,7 +219,6 @@ Then guide them with questions that will help them explore the topic systematica
   }
 
   const extractLearningContext = (userMessage: string, _aiResponse: string): Partial<LearningContext> => {
-    // Simple extraction logic - in production, you might use more sophisticated NLP
     const topicKeywords = userMessage.toLowerCase()
     let topic = 'general inquiry'
     let userLevel: 'beginner' | 'intermediate' | 'advanced' = 'beginner'
@@ -135,7 +240,7 @@ Then guide them with questions that will help them explore the topic systematica
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     
-    if (!inputValue.trim()) return
+    if (!inputValue.trim() || !activeChatId) return
 
     // Add user message to chat
     const userMessage: Message = {
@@ -144,7 +249,31 @@ Then guide them with questions that will help them explore the topic systematica
       isUser: true,
       timestamp: new Date(),
     }
+    
+    // Update local state immediately for better UX
     setMessages((prev) => [...prev, userMessage])
+
+    // Save to Firestore
+    try {
+      await saveMessage(activeChatId, messageToFirestore(userMessage))
+      
+      // Auto-generate title from first message
+      if (messages.length === 0) {
+        const title = generateChatTitle(inputValue)
+        await updateChatTitle(activeChatId, title)
+        
+        // Update local chat history
+        setChatHistory(prev => 
+          prev.map(chat => 
+            chat.id === activeChatId 
+              ? { ...chat, title }
+              : chat
+          )
+        )
+      }
+    } catch (error) {
+      console.error('Error saving user message:', error)
+    }
 
     // Clear input
     const currentInput = inputValue
@@ -163,23 +292,36 @@ Then guide them with questions that will help them explore the topic systematica
 
       // Update learning context
       const contextUpdates = extractLearningContext(currentInput, text)
+      let updatedContext = learningContext
+
       if (!learningContext && contextUpdates.topic) {
-        setLearningContext({
+        updatedContext = {
           topic: contextUpdates.topic,
           userLevel: contextUpdates.userLevel || 'beginner',
           previousQuestions: [],
           userInsights: [],
           currentFocus: contextUpdates.currentFocus || contextUpdates.topic
-        })
+        }
+        setLearningContext(updatedContext)
       } else if (learningContext) {
-        setLearningContext(prev => ({
-          ...prev!,
-          previousQuestions: [...prev!.previousQuestions, currentInput].slice(-5), // Keep last 5
-          userInsights: [...prev!.userInsights, currentInput].slice(-10) // Keep last 10
-        }))
+        updatedContext = {
+          ...learningContext,
+          previousQuestions: [...learningContext.previousQuestions, currentInput].slice(-5),
+          userInsights: [...learningContext.userInsights, currentInput].slice(-10)
+        }
+        setLearningContext(updatedContext)
       }
 
-      // Determine message type based on response content
+      // Save updated learning context
+      if (updatedContext) {
+        try {
+          await saveLearningContext(activeChatId, updatedContext)
+        } catch (error) {
+          console.error('Error saving learning context:', error)
+        }
+      }
+
+      // Determine message type
       let messageType: Message['messageType'] = 'question'
       const responseText = typeof text === "string" ? text : String(text)
       if (responseText.includes('excellent') || responseText.includes('good thinking')) messageType = 'encouragement'
@@ -193,7 +335,16 @@ Then guide them with questions that will help them explore the topic systematica
         timestamp: new Date(),
         messageType
       }
+
       setMessages((prev) => [...prev, aiMessage])
+
+      // Save AI message to Firestore
+      try {
+        await saveMessage(activeChatId, messageToFirestore(aiMessage))
+      } catch (error) {
+        console.error('Error saving AI message:', error)
+      }
+
     } catch (error) {
       console.error("Gemini API error:", error)
       const errorMessage: Message = {
@@ -204,6 +355,13 @@ Then guide them with questions that will help them explore the topic systematica
         messageType: 'question'
       }
       setMessages((prev) => [...prev, errorMessage])
+
+      // Save error message
+      try {
+        await saveMessage(activeChatId, messageToFirestore(errorMessage))
+      } catch (saveError) {
+        console.error('Error saving error message:', saveError)
+      }
     }
   }
 
@@ -211,17 +369,66 @@ Then guide them with questions that will help them explore the topic systematica
     setInputValue(e.target.value)
   }
 
-  const handleNewChat = () => {
-    setMessages([])
-    setLearningContext(null)
-    setSidebarOpen(false)
+  const handleNewChat = async () => {
+    try {
+      const newChatId = await createNewChat(userId)
+      setActiveChatId(newChatId)
+      setMessages([])
+      setLearningContext(null)
+      setSidebarOpen(false)
+
+      // Add to local chat history
+      const newChat: ChatHistory = {
+        id: newChatId,
+        title: 'New Learning Session',
+        timestamp: new Date()
+      }
+      setChatHistory(prev => [newChat, ...prev])
+    } catch (error) {
+      console.error('Error creating new chat:', error)
+    }
   }
 
   const handleSelectChat = (chatId: string) => {
-    setActiveChatId(chatId)
-    setMessages([])
-    setLearningContext(null)
-    setSidebarOpen(false)
+    if (chatId !== activeChatId) {
+      setActiveChatId(chatId)
+      setSidebarOpen(false)
+    }
+  }
+
+  const handleDeleteChat = async (chatId: string) => {
+    try {
+      await deleteChat(chatId)
+      
+      // Remove from local state
+      setChatHistory(prev => prev.filter(chat => chat.id !== chatId))
+      
+      // If this was the active chat, select another or create new
+      if (chatId === activeChatId) {
+        const remainingChats = chatHistory.filter(chat => chat.id !== chatId)
+        if (remainingChats.length > 0) {
+          setActiveChatId(remainingChats[0].id)
+        } else {
+          const newChatId = await createNewChat(userId)
+          setActiveChatId(newChatId)
+          setMessages([])
+          setLearningContext(null)
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          <p className="text-muted-foreground">Loading your learning sessions...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -255,20 +462,28 @@ Then guide them with questions that will help them explore the topic systematica
           chatHistory={chatHistory}
           activeChatId={activeChatId}
           onSelectChat={handleSelectChat}
+          onDeleteChat={handleDeleteChat}
         />
 
         {/* Chat Column */}
         <div className="flex flex-col flex-1">
           {/* Messages Scroll Area */}
           <ScrollArea className="flex-1 p-4">
-            {messages.length === 0 ? (
+            {messageLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground">Loading messages...</p>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <span className="text-2xl">🤔</span>
                 </div>
                 <h2 className="text-2xl font-semibold mb-2">Welcome to Sage-Socratic</h2>
                 <p className="text-muted-foreground max-w-md mb-4">
-                  I&apos;m here to guide your learning journey through thoughtful questions and exploration.
+                  I'm here to guide your learning journey through thoughtful questions and exploration.
                 </p>
                 <div className="text-sm text-muted-foreground space-y-2">
                   <p><strong>How I teach:</strong></p>
