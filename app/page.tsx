@@ -2,7 +2,7 @@
 
 import TotalNav from "@/components/totalnav";
 import { Vortex } from "@/components/ui/vortex";
-import React, { useState } from "react";
+import React from "react";
 
 
 export default function page() {
@@ -10,7 +10,7 @@ export default function page() {
   return (
     <>
     <TotalNav></TotalNav>
-    <div className="w-[calc(100%-4rem)] mx-auto rounded-md  h-screen overflow-hidden">
+    <div className="w-full mx-auto rounded-md  h-screen overflow-hidden">
       <Vortex
         backgroundColor="black"
         rangeY={800}
