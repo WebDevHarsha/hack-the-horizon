@@ -1,9 +1,15 @@
+"use client"
+
+import TotalNav from "@/components/totalnav";
 import { Vortex } from "@/components/ui/vortex";
-import React from "react";
+import React, { useState } from "react";
 
 
-export default function pagepage() {
+export default function page() {
+  
   return (
+    <>
+    <TotalNav></TotalNav>
     <div className="w-[calc(100%-4rem)] mx-auto rounded-md  h-screen overflow-hidden">
       <Vortex
         backgroundColor="black"
@@ -27,5 +33,6 @@ export default function pagepage() {
         </div>
       </Vortex>
     </div>
+    </>
   );
 }
