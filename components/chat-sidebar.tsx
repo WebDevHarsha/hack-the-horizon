@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { MessageSquare, Plus, Settings, X } from "lucide-react"
+import {  Plus, Settings  } from "lucide-react"
 
 interface ChatHistory {
   id: string
@@ -95,7 +95,7 @@ export function ChatSidebar({
           </div>
 
           {/* Settings */}
-          <div className="p-4 border-t border-sidebar-border">
+          <div className="p-[22px] border-t border-sidebar-border">
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent"

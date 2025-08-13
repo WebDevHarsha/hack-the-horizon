@@ -18,8 +18,10 @@ export default function LoginFormDemo() {
   });
 
   // Firebase hooks
-  const [signInWithEmailAndPassword, user, loading, error] = useSignInWithEmailAndPassword(auth);
-  const [signInWithGoogle, googleUser, googleLoading, googleError] = useSignInWithGoogle(auth);
+const [signInWithEmailAndPassword, , loading, error] =
+  useSignInWithEmailAndPassword(auth);
+const [signInWithGoogle, , googleLoading, googleError] =
+  useSignInWithGoogle(auth);
   
   // Router for navigation
   const router = useRouter();
