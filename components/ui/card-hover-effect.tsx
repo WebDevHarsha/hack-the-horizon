@@ -14,7 +14,7 @@ function HoverEffect({
   }[];
   className?: string;
 }) {
-  let [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   return (
     <div
@@ -25,6 +25,7 @@ function HoverEffect({
     >
       {items.map((item, idx) => (
         <a
+          key={idx}
           href={item?.link}
           className="relative group block p-2 h-full w-full"
           onMouseEnter={() => setHoveredIndex(idx)}

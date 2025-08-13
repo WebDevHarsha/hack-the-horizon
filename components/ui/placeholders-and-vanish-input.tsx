@@ -6,6 +6,19 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 
+interface PixelData {
+  x: number
+  y: number
+  color: [number, number, number, number]
+}
+
+interface AnimationData {
+  x: number
+  y: number
+  r: number
+  color: string
+}
+
 export function PlaceholdersAndVanishInput({
   placeholders,
   onChange,
@@ -59,9 +72,9 @@ export function PlaceholdersAndVanishInput({
   }, [handleVisibilityChange, startAnimation])
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const newDataRef = useRef<any[]>([])
+  const newDataRef = useRef<AnimationData[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
-  const [animationComplete, setAnimationComplete] = useState(false)
+  const [, setAnimationComplete] = useState(false)
 
   const draw = useCallback(() => {
     if (!inputRef.current) return
@@ -82,7 +95,7 @@ export function PlaceholdersAndVanishInput({
 
     const imageData = ctx.getImageData(0, 0, 800, 800)
     const pixelData = imageData.data
-    const newData: any[] = []
+    const newData: PixelData[] = []
 
     for (let t = 0; t < 800; t++) {
       const i = 4 * t * 800
@@ -175,7 +188,9 @@ export function PlaceholdersAndVanishInput({
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     vanishAndSubmit()
-    onSubmit && onSubmit(e)
+    if (onSubmit) {
+      onSubmit(e)
+    }
     // Clear the input after submission if no external value is provided
     if (externalValue === undefined) {
       setValue("")
@@ -201,7 +216,9 @@ export function PlaceholdersAndVanishInput({
         onChange={(e) => {
           if (!animating) {
             setValue(e.target.value)
-            onChange && onChange(e)
+            if (onChange) {
+              onChange(e)
+            }
           }
         }}
         onKeyDown={handleKeyDown}

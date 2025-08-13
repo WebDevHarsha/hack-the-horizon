@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
-  IconBrandGithub,
   IconBrandGoogle,
 } from "@tabler/icons-react";
 import { Input } from "@/components/ui/input";
@@ -20,8 +19,8 @@ export default function SignupFormDemo() {
   });
 
   // Firebase hooks
-  const [createUserWithEmailAndPassword, user, loading, error] = useCreateUserWithEmailAndPassword(auth);
-  const [signInWithGoogle, googleUser, googleLoading, googleError] = useSignInWithGoogle(auth);
+  const [createUserWithEmailAndPassword, , loading, error] = useCreateUserWithEmailAndPassword(auth);
+  const [signInWithGoogle, , googleLoading, googleError] = useSignInWithGoogle(auth);
 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
