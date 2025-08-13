@@ -14,7 +14,7 @@ export default function TotalNav() {
     const [mobileOpen, setMobileOpen] = useState(false);
       const navLinks = [
         { name: "Home", link: "/" },
-        { name: "Products", link: "/products" },
+        { name: "Models", link: "/models" },
         { name: "Founders", link: "/founders" },
         { name: "Contact", link: "/contact" },
       ];

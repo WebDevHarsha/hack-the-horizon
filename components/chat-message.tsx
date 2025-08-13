@@ -7,27 +7,9 @@ interface ChatMessageProps {
   message: string
   isUser: boolean
   timestamp: Date
-  messageType?: 'question' | 'reflection' | 'encouragement' | 'guidance'
 }
 
-export function ChatMessage({ message, isUser, timestamp, messageType }: ChatMessageProps) {
-  const getMessageTypeColor = () => {
-    if (isUser) return "bg-primary text-primary-foreground ml-auto"
-    
-    switch (messageType) {
-      case 'encouragement':
-        return "bg-green-100 text-green-900 border-l-4 border-green-500"
-      case 'reflection':
-        return "bg-blue-100 text-blue-900 border-l-4 border-blue-500"
-      case 'guidance':
-        return "bg-yellow-100 text-yellow-900 border-l-4 border-yellow-500"
-      case 'question':
-        return "bg-purple-100 text-purple-900 border-l-4 border-purple-500"
-      default:
-        return "bg-muted text-muted-foreground"
-    }
-  }
-
+export function ChatMessage({ message, isUser, timestamp }: ChatMessageProps) {
   return (
     <div className={cn("flex gap-3 p-4", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
@@ -40,7 +22,7 @@ export function ChatMessage({ message, isUser, timestamp, messageType }: ChatMes
         <div
           className={cn(
             "rounded-2xl px-4 py-2 text-sm",
-            getMessageTypeColor()
+            isUser ? "bg-primary text-primary-foreground ml-auto" : "bg-muted text-muted-foreground",
           )}
         >
           {message}

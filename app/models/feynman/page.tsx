@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export default function SocraticChatPage() {
+export default function FeynmanCoachPage() {
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,18 +24,21 @@ export default function SocraticChatPage() {
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-      // Build conversation context for better Socratic flow
+      // Pass conversation so far
       const conversationHistory = messages
         .map((m) => `${m.role.toUpperCase()}: ${m.text}`)
         .join("\n");
 
-      // Socratic system instruction
-      const socraticPrompt = `
-You are a Socratic teacher. 
-You never give direct answers. 
-You respond with thought-provoking, open-ended questions that guide the student to figure out the answer themselves.
-Encourage deeper reasoning, ask "why" or "how" questions, and build on their previous responses.
-Keep it conversational but intellectually challenging.
+      // Prompt for "Feynman coach" style
+      const feynmanCoachPrompt = `
+You are acting as a Feynman Technique coach.
+The student (user) is explaining a concept.
+Your role:
+1. Do NOT explain the concept for them.
+2. Listen to their explanation and point out parts that are unclear, missing, or too complex.
+3. Ask them to simplify, clarify, or give an example in their own words.
+4. Use follow-up questions like: "Can you explain that more simply?" or "What does that mean in everyday terms?"
+5. Keep them doing the explaining — only guide them with questions.
 
 Conversation so far:
 ${conversationHistory}
@@ -45,7 +48,7 @@ User just said: "${input}"
 Your response:
 `;
 
-      const result = await model.generateContent(socraticPrompt);
+      const result = await model.generateContent(feynmanCoachPrompt);
       const text = result.response.text();
 
       setMessages((prev) => [...prev, { role: "assistant", text }]);
@@ -68,7 +71,7 @@ Your response:
             key={i}
             className={`p-3 rounded-lg max-w-[80%] ${
               m.role === "user"
-                ? "bg-blue-500 text-white self-end ml-auto"
+                ? "bg-purple-500 text-white self-end ml-auto"
                 : "bg-gray-200 text-gray-900 self-start"
             }`}
           >
@@ -81,13 +84,13 @@ Your response:
       <div className="mt-4 flex gap-2">
         <input
           className="flex-1 p-2 border rounded-lg"
-          placeholder="Ask or answer..."
+          placeholder="Explain your concept here..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
         />
         <button
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg"
+          className="bg-purple-500 text-white px-4 py-2 rounded-lg"
           onClick={sendMessage}
           disabled={loading}
         >
