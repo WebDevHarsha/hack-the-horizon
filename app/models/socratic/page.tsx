@@ -1,13 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { useState, useEffect } from "react";
+import { GoogleGenAI } from "@google/genai";
 import { MessageSquare, Plus, Settings, Brain } from "lucide-react";
 import ModelsNav from "@/components/modelsnav";
-
-// Models navigation component
+import { auth, db } from "@/app/firebase/config";
+import { 
+  signInWithPopup,
+  GoogleAuthProvider,
+  onAuthStateChanged
+} from "firebase/auth";
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot,
+  serverTimestamp 
+} from "firebase/firestore";
 
 export default function SocraticChatPage() {
+  const [user, setUser] = useState(null);
   const [conversations, setConversations] = useState([
     { id: 1, title: "New Conversation", messages: [] }
   ]);
@@ -21,41 +36,210 @@ export default function SocraticChatPage() {
   const messages = activeConversation?.messages || [];
 
   // Initialize Gemini
-  const genAI = new GoogleGenerativeAI(
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
-  );
+  const ai = new GoogleGenAI({
+    apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
+  });
+
+  // Authentication and data loading effect
+  useEffect(() => {
+    console.log("Authentication effect starting...");
+    
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", user ? `User: ${user.uid}` : "No user");
+      
+      if (user) {
+        setUser(user);
+        console.log("Loading conversations for user:", user.uid);
+        loadUserConversations(user.uid);
+      } else {
+        console.log("No user found, attempting authentication...");
+        // Create a local user ID for this browser
+        const localUserId = localStorage.getItem('socratic_user_id') || 
+                           `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        if (!localStorage.getItem('socratic_user_id')) {
+          localStorage.setItem('socratic_user_id', localUserId);
+        }
+
+        console.log("Using local user ID:", localUserId);
+        setUser({ uid: localUserId });
+        loadUserConversations(localUserId);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Load user conversations from Firestore
+  const loadUserConversations = (userId) => {
+    console.log("Loading conversations for userId:", userId);
+    
+    try {
+      const q = query(
+        collection(db, "conversations"),
+        where("userId", "==", userId),
+        orderBy("updatedAt", "desc")
+      );
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        console.log("Firestore snapshot received, docs count:", querySnapshot.size);
+        
+        const loadedConversations = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          console.log("Loaded conversation:", doc.id, data);
+          loadedConversations.push({
+            id: doc.id,
+            title: data.title,
+            messages: data.messages || []
+          });
+        });
+        
+        if (loadedConversations.length > 0) {
+          console.log("Setting conversations:", loadedConversations);
+          setConversations(loadedConversations);
+          // Set active conversation to the most recent one if none selected
+          if (!activeConversationId || activeConversationId === 1) {
+            setActiveConversationId(loadedConversations[0].id);
+          }
+        } else {
+          console.log("No conversations found, creating initial conversation");
+          // Create initial conversation if none exist
+          createInitialConversation(userId);
+        }
+      }, (error) => {
+        console.error("Error loading conversations:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        
+        // Fallback to creating initial conversation
+        createInitialConversation(userId);
+      });
+
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error setting up conversation listener:", error);
+      createInitialConversation(userId);
+    }
+  };
+
+  // Create initial conversation for new users
+  const createInitialConversation = async (userId) => {
+    console.log("Creating initial conversation for user:", userId);
+    
+    const initialId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const initialConversation = {
+      id: initialId,
+      title: "New Conversation",
+      messages: [],
+      userId: userId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    try {
+      console.log("Saving initial conversation:", initialConversation);
+      await saveConversation(initialConversation);
+      console.log("Initial conversation saved successfully");
+      setActiveConversationId(initialId);
+      
+      // Also update local state immediately
+      setConversations([{
+        id: initialId,
+        title: "New Conversation",
+        messages: []
+      }]);
+    } catch (error) {
+      console.error("Error creating initial conversation:", error);
+      
+      // Fallback: create local-only conversation
+      setConversations([{
+        id: initialId,
+        title: "New Conversation",
+        messages: []
+      }]);
+      setActiveConversationId(initialId);
+    }
+  };
+
+  // Save conversation to Firestore
+  const saveConversation = async (conversationData) => {
+    if (!user) {
+      console.log("No user - cannot save to Firestore");
+      return;
+    }
+
+    try {
+      console.log("Saving conversation to Firestore:", conversationData.id);
+      const conversationRef = doc(db, "conversations", conversationData.id);
+      await setDoc(conversationRef, {
+        ...conversationData,
+        userId: user.uid,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      console.log("Successfully saved conversation:", conversationData.id);
+    } catch (error) {
+      console.error("Error saving conversation:", error);
+    }
+  };
 
   // Create new conversation
   function createNewConversation() {
-    const newId = Math.max(...conversations.map(c => c.id)) + 1;
+    if (!user) return;
+
+    const newId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newConversation = {
       id: newId,
       title: "New Conversation",
-      messages: []
+      messages: [],
+      userId: user.uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
-    setConversations(prev => [...prev, newConversation]);
+
+    // Add to local state immediately for responsive UI
+    setConversations(prev => [newConversation, ...prev]);
     setActiveConversationId(newId);
+    
+    // Save to Firestore
+    saveConversation(newConversation);
   }
 
   // Update conversation messages
   function updateConversationMessages(newMessages) {
+    if (!user) return;
+
+    const updatedTitle = newMessages.length > 0 && activeConversation?.title === "New Conversation"
+      ? newMessages[0].text.slice(0, 30) + "..."
+      : activeConversation?.title || "New Conversation";
+
+    // Update local state immediately
     setConversations(prev =>
       prev.map(conv =>
         conv.id === activeConversationId
           ? {
-            ...conv,
-            messages: newMessages,
-            title: newMessages.length > 0 && conv.title === "New Conversation"
-              ? newMessages[0].text.slice(0, 30) + "..."
-              : conv.title
-          }
+              ...conv,
+              messages: newMessages,
+              title: updatedTitle
+            }
           : conv
       )
     );
+
+    // Save to Firestore
+    const updatedConversation = {
+      id: activeConversationId,
+      title: updatedTitle,
+      messages: newMessages,
+      userId: user.uid,
+      updatedAt: serverTimestamp()
+    };
+    
+    saveConversation(updatedConversation);
   }
 
   async function sendMessage() {
-    if (!input.trim()) return;
+    if (!input.trim() || !user) return;
 
     const userMessage = { role: "user", text: input };
     const newMessages = [...messages, userMessage];
@@ -64,8 +248,6 @@ export default function SocraticChatPage() {
     setLoading(true);
 
     try {
-      const model = genAI.getGenerativeModel({ model: selectedModel });
-
       // Build conversation context for better Socratic flow
       const conversationHistory = messages
         .map((m) => `${m.role.toUpperCase()}: ${m.text}`)
@@ -87,8 +269,12 @@ User just said: "${input}"
 Your response:
 `;
 
-      const result = await model.generateContent(socraticPrompt);
-      const text = result.response.text();
+      const response = await ai.models.generateContent({
+        model: selectedModel,
+        contents: socraticPrompt
+      });
+      
+      const text = response.text;
 
       const finalMessages = [...newMessages, { role: "assistant", text }];
       updateConversationMessages(finalMessages);
