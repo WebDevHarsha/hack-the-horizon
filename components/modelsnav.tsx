@@ -14,7 +14,7 @@ export default function ModelsNav() {
     const [mobileOpen, setMobileOpen] = useState(false);
       const navLinks = [
         { name: "Socratic", link: "/models/socratic" },
-        { name: "Feynman", link: "/about" },
+        { name: "Feynman", link: "/models/feynman" },
         { name: "", link: "/services" },
         { name: "", link: "/contact" },
       ];
